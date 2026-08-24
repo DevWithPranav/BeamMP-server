@@ -76,7 +76,7 @@ Set these in your GitHub repo settings:
 - `APP_DIR`: optional target path on the Ubuntu laptop, for example `/home/youruser/apps/beammp-server`.
 - `TS_AUTHKEY`: Tailscale auth key for the containerized node.
 - `TS_HOSTNAME`: Tailscale hostname for the server container.
-- `BEAMMP_AUTH_KEY`: BeamMP Keymaster auth key.
+- `BEAMMP_AUTH_KEY`: BeamMP Keymaster auth key. Optional only for private direct-connect use in this repo.
 - `BEAMMP_NAME`
 - `BEAMMP_DESCRIPTION`
 - `BEAMMP_PRIVATE`
@@ -123,6 +123,8 @@ Put client mods in `beammp-data/Resources/Client` and server Lua plugins in `bea
 ## Notes
 
 - The entrypoint creates `ServerConfig.toml` on first boot if it does not already exist.
+- If `BEAMMP_PRIVATE=true` and `BEAMMP_AUTH_KEY` is empty, the container uses a placeholder auth key so a private direct-connect server can still boot while Keymaster is unavailable.
+- If you later want public listing, set `BEAMMP_PRIVATE=false`, add a real `BEAMMP_AUTH_KEY`, and redeploy.
 - Environment variables can still override config values supported by BeamMP.
 - This is aimed at private hosting over Tailscale, not a public internet-facing server list setup.
 

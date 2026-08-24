@@ -3,6 +3,17 @@ set -euo pipefail
 
 cd /srv/beammp
 
+private_mode="${BEAMMP_PRIVATE:-true}"
+auth_key="${BEAMMP_AUTH_KEY:-}"
+
+if [[ -z "$auth_key" && "$private_mode" == "true" ]]; then
+  auth_key="private-direct-connect-placeholder"
+  echo "BEAMMP_AUTH_KEY not set; using a private-mode placeholder key for direct connect." >&2
+elif [[ -z "$auth_key" ]]; then
+  echo "BEAMMP_AUTH_KEY is required when BEAMMP_PRIVATE is false." >&2
+  exit 1
+fi
+
 mkdir -p "${BEAMMP_RESOURCE_FOLDER:-Resources}"
 mkdir -p "${BEAMMP_RESOURCE_FOLDER:-Resources}/Client"
 mkdir -p "${BEAMMP_RESOURCE_FOLDER:-Resources}/Server"
@@ -11,8 +22,8 @@ if [[ ! -f ServerConfig.toml ]]; then
   cat > ServerConfig.toml <<EOF
 [General]
 Port = ${BEAMMP_PORT:-30814}
-AuthKey = "${BEAMMP_AUTH_KEY:-}"
-Private = ${BEAMMP_PRIVATE:-true}
+AuthKey = "${auth_key}"
+Private = ${private_mode}
 Name = "${BEAMMP_NAME:-Private BeamMP Server}"
 Description = "${BEAMMP_DESCRIPTION:-BeamMP server over Tailscale}"
 Map = "${BEAMMP_MAP:-/levels/gridmap_v2/info.json}"
@@ -25,10 +36,4 @@ ResourceFolder = "${BEAMMP_RESOURCE_FOLDER:-Resources}"
 EOF
 fi
 
-if [[ -z "${BEAMMP_AUTH_KEY:-}" ]]; then
-  echo "BEAMMP_AUTH_KEY is required." >&2
-  exit 1
-fi
-
 exec /usr/local/bin/BeamMP-Server
-
