@@ -1,0 +1,8 @@
+.env
+.env.local
+beammp-data/Server.log
+beammp-data/server.log
+beammp-data/*.log
+deploy/runtime.env
+deploy/ssh_key
+

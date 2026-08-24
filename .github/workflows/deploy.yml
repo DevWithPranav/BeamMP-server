@@ -1,0 +1,60 @@
+name: Deploy BeamMP Server
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+
+      - name: Add target host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy deploy script
+        run: |
+          scp deploy/sync-and-run.sh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/beammp-sync-and-run.sh"
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          REPO_URL: ${{ secrets.REPO_URL }}
+          APP_DIR: ${{ secrets.APP_DIR }}
+          BRANCH: main
+          TS_AUTHKEY: ${{ secrets.TS_AUTHKEY }}
+          TS_HOSTNAME: ${{ secrets.TS_HOSTNAME }}
+          BEAMMP_AUTH_KEY: ${{ secrets.BEAMMP_AUTH_KEY }}
+          BEAMMP_NAME: ${{ secrets.BEAMMP_NAME }}
+          BEAMMP_DESCRIPTION: ${{ secrets.BEAMMP_DESCRIPTION }}
+          BEAMMP_PRIVATE: ${{ secrets.BEAMMP_PRIVATE }}
+          BEAMMP_PORT: ${{ secrets.BEAMMP_PORT }}
+          BEAMMP_MAP: ${{ secrets.BEAMMP_MAP }}
+          BEAMMP_MAX_PLAYERS: ${{ secrets.BEAMMP_MAX_PLAYERS }}
+          BEAMMP_MAX_CARS: ${{ secrets.BEAMMP_MAX_CARS }}
+          BEAMMP_TAGS: ${{ secrets.BEAMMP_TAGS }}
+          BEAMMP_ALLOW_GUESTS: ${{ secrets.BEAMMP_ALLOW_GUESTS }}
+          BEAMMP_LOG_CHAT: ${{ secrets.BEAMMP_LOG_CHAT }}
+          BEAMMP_VERSION: ${{ secrets.BEAMMP_VERSION }}
+          BEAMMP_ASSET: ${{ secrets.BEAMMP_ASSET }}
+        run: |
+          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "export REPO_URL='${REPO_URL}' APP_DIR='${APP_DIR}' BRANCH='${BRANCH}' \
+            TS_AUTHKEY='${TS_AUTHKEY}' TS_HOSTNAME='${TS_HOSTNAME}' BEAMMP_AUTH_KEY='${BEAMMP_AUTH_KEY}' \
+            BEAMMP_NAME='${BEAMMP_NAME}' BEAMMP_DESCRIPTION='${BEAMMP_DESCRIPTION}' BEAMMP_PRIVATE='${BEAMMP_PRIVATE}' \
+            BEAMMP_PORT='${BEAMMP_PORT}' BEAMMP_MAP='${BEAMMP_MAP}' BEAMMP_MAX_PLAYERS='${BEAMMP_MAX_PLAYERS}' \
+            BEAMMP_MAX_CARS='${BEAMMP_MAX_CARS}' BEAMMP_TAGS='${BEAMMP_TAGS}' BEAMMP_ALLOW_GUESTS='${BEAMMP_ALLOW_GUESTS}' \
+            BEAMMP_LOG_CHAT='${BEAMMP_LOG_CHAT}' BEAMMP_VERSION='${BEAMMP_VERSION}' BEAMMP_ASSET='${BEAMMP_ASSET}' \
+            bash /tmp/beammp-sync-and-run.sh"

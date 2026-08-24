@@ -1,0 +1,40 @@
+name: Validate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  compose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create CI env file
+        run: |
+          cat > .env <<'EOF'
+          TS_AUTHKEY=dummy-ts-key
+          TS_HOSTNAME=beammp-ci
+          BEAMMP_AUTH_KEY=dummy-beammp-key
+          BEAMMP_NAME=BeamMP CI
+          BEAMMP_DESCRIPTION=Validation only
+          BEAMMP_PRIVATE=true
+          BEAMMP_PORT=30814
+          BEAMMP_MAP=/levels/gridmap_v2/info.json
+          BEAMMP_MAX_PLAYERS=4
+          BEAMMP_MAX_CARS=2
+          BEAMMP_TAGS=Freeroam,Private
+          BEAMMP_ALLOW_GUESTS=false
+          BEAMMP_LOG_CHAT=false
+          BEAMMP_VERSION=v3.9.2
+          BEAMMP_ASSET=BeamMP-Server.ubuntu.24.04.x86_64
+          EOF
+
+      - name: Validate compose config
+        run: docker compose config
+
+      - name: Build BeamMP image
+        run: docker compose build beammp
+

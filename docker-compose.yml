@@ -1,0 +1,46 @@
+services:
+  tailscale:
+    image: tailscale/tailscale:stable
+    hostname: ${TS_HOSTNAME:-beammp-server}
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      TS_EXTRA_ARGS: --accept-routes=false --ssh
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    restart: unless-stopped
+
+  beammp:
+    build:
+      context: .
+      args:
+        BEAMMP_VERSION: ${BEAMMP_VERSION:-v3.9.2}
+        BEAMMP_ASSET: ${BEAMMP_ASSET:-BeamMP-Server.ubuntu.24.04.x86_64}
+    network_mode: service:tailscale
+    depends_on:
+      - tailscale
+    environment:
+      BEAMMP_AUTH_KEY: ${BEAMMP_AUTH_KEY}
+      BEAMMP_PRIVATE: ${BEAMMP_PRIVATE:-true}
+      BEAMMP_NAME: ${BEAMMP_NAME:-Private BeamMP Server}
+      BEAMMP_DESCRIPTION: ${BEAMMP_DESCRIPTION:-BeamMP server over Tailscale}
+      BEAMMP_PORT: ${BEAMMP_PORT:-30814}
+      BEAMMP_MAP: ${BEAMMP_MAP:-/levels/gridmap_v2/info.json}
+      BEAMMP_MAX_PLAYERS: ${BEAMMP_MAX_PLAYERS:-8}
+      BEAMMP_MAX_CARS: ${BEAMMP_MAX_CARS:-2}
+      BEAMMP_TAGS: ${BEAMMP_TAGS:-Freeroam,Private}
+      BEAMMP_ALLOW_GUESTS: ${BEAMMP_ALLOW_GUESTS:-false}
+      BEAMMP_LOG_CHAT: ${BEAMMP_LOG_CHAT:-false}
+      BEAMMP_RESOURCE_FOLDER: ${BEAMMP_RESOURCE_FOLDER:-Resources}
+    volumes:
+      - ./beammp-data:/srv/beammp
+    restart: unless-stopped
+
+volumes:
+  tailscale-state:
