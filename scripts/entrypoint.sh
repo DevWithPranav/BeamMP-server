@@ -14,6 +14,11 @@ elif [[ -z "$auth_key" ]]; then
   exit 1
 fi
 
+# BeamMP treats environment variables as higher priority than ServerConfig.toml.
+# If the incoming env was empty, export the resolved auth key so private
+# direct-connect mode doesn't get overridden back to an empty string.
+export BEAMMP_AUTH_KEY="$auth_key"
+
 mkdir -p "${BEAMMP_RESOURCE_FOLDER:-Resources}"
 mkdir -p "${BEAMMP_RESOURCE_FOLDER:-Resources}/Client"
 mkdir -p "${BEAMMP_RESOURCE_FOLDER:-Resources}/Server"
