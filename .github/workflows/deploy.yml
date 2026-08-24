@@ -58,11 +58,24 @@ jobs:
           BEAMMP_VERSION: ${{ secrets.BEAMMP_VERSION }}
           BEAMMP_ASSET: ${{ secrets.BEAMMP_ASSET }}
         run: |
-          ssh "${DEPLOY_USER}@${DEPLOY_HOST}" \
-            "export REPO_URL='${REPO_URL}' APP_DIR='${APP_DIR}' BRANCH='${BRANCH}' \
-            TS_AUTHKEY='${TS_AUTHKEY}' TS_HOSTNAME='${TS_HOSTNAME}' BEAMMP_AUTH_KEY='${BEAMMP_AUTH_KEY}' \
-            BEAMMP_NAME='${BEAMMP_NAME}' BEAMMP_DESCRIPTION='${BEAMMP_DESCRIPTION}' BEAMMP_PRIVATE='${BEAMMP_PRIVATE}' \
-            BEAMMP_PORT='${BEAMMP_PORT}' BEAMMP_MAP='${BEAMMP_MAP}' BEAMMP_MAX_PLAYERS='${BEAMMP_MAX_PLAYERS}' \
-            BEAMMP_MAX_CARS='${BEAMMP_MAX_CARS}' BEAMMP_TAGS='${BEAMMP_TAGS}' BEAMMP_ALLOW_GUESTS='${BEAMMP_ALLOW_GUESTS}' \
-            BEAMMP_LOG_CHAT='${BEAMMP_LOG_CHAT}' BEAMMP_VERSION='${BEAMMP_VERSION}' BEAMMP_ASSET='${BEAMMP_ASSET}' \
-            bash /tmp/beammp-sync-and-run.sh"
+          {
+            printf "export REPO_URL=%q\n" "$REPO_URL"
+            printf "export APP_DIR=%q\n" "$APP_DIR"
+            printf "export BRANCH=%q\n" "$BRANCH"
+            printf "export TS_AUTHKEY=%q\n" "$TS_AUTHKEY"
+            printf "export TS_HOSTNAME=%q\n" "$TS_HOSTNAME"
+            printf "export BEAMMP_AUTH_KEY=%q\n" "$BEAMMP_AUTH_KEY"
+            printf "export BEAMMP_NAME=%q\n" "$BEAMMP_NAME"
+            printf "export BEAMMP_DESCRIPTION=%q\n" "$BEAMMP_DESCRIPTION"
+            printf "export BEAMMP_PRIVATE=%q\n" "$BEAMMP_PRIVATE"
+            printf "export BEAMMP_PORT=%q\n" "$BEAMMP_PORT"
+            printf "export BEAMMP_MAP=%q\n" "$BEAMMP_MAP"
+            printf "export BEAMMP_MAX_PLAYERS=%q\n" "$BEAMMP_MAX_PLAYERS"
+            printf "export BEAMMP_MAX_CARS=%q\n" "$BEAMMP_MAX_CARS"
+            printf "export BEAMMP_TAGS=%q\n" "$BEAMMP_TAGS"
+            printf "export BEAMMP_ALLOW_GUESTS=%q\n" "$BEAMMP_ALLOW_GUESTS"
+            printf "export BEAMMP_LOG_CHAT=%q\n" "$BEAMMP_LOG_CHAT"
+            printf "export BEAMMP_VERSION=%q\n" "$BEAMMP_VERSION"
+            printf "export BEAMMP_ASSET=%q\n" "$BEAMMP_ASSET"
+            printf "bash /tmp/beammp-sync-and-run.sh\n"
+          } | ssh "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -se'
