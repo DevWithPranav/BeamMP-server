@@ -13,6 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Join Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TS_CI_AUTHKEY }}
+          hostname: github-actions-beammp
+          version: latest
+          ping: ${{ secrets.DEPLOY_HOST }}
+
       - name: Start SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
