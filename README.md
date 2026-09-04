@@ -90,9 +90,9 @@ Set these in your GitHub repo settings:
 - `BEAMMP_VERSION`
 - `BEAMMP_ASSET`
 
-Recommended values on August 24, 2026:
+Recommended values on September 5, 2026:
 
-- `BEAMMP_VERSION`: `v3.9.2`
+- `BEAMMP_VERSION`: `v3.9.3`
 - `BEAMMP_ASSET`: `BeamMP-Server.ubuntu.24.04.x86_64`
 
 ## How players connect

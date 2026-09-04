@@ -1,7 +1,7 @@
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG BEAMMP_VERSION=v3.9.2
+ARG BEAMMP_VERSION=v3.9.3
 ARG BEAMMP_ASSET=BeamMP-Server.ubuntu.24.04.x86_64
 
 RUN apt-get update \

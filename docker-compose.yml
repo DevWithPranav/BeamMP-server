@@ -20,7 +20,7 @@ services:
     build:
       context: .
       args:
-        BEAMMP_VERSION: ${BEAMMP_VERSION:-v3.9.2}
+        BEAMMP_VERSION: ${BEAMMP_VERSION:-v3.9.3}
         BEAMMP_ASSET: ${BEAMMP_ASSET:-BeamMP-Server.ubuntu.24.04.x86_64}
     network_mode: service:tailscale
     depends_on:

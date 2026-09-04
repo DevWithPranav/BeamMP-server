@@ -28,7 +28,7 @@ jobs:
           BEAMMP_TAGS=Freeroam,Private
           BEAMMP_ALLOW_GUESTS=false
           BEAMMP_LOG_CHAT=false
-          BEAMMP_VERSION=v3.9.2
+          BEAMMP_VERSION=v3.9.3
           BEAMMP_ASSET=BeamMP-Server.ubuntu.24.04.x86_64
           EOF
 
