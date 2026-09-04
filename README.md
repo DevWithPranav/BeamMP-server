@@ -118,13 +118,15 @@ Persistent data is stored in `beammp-data/`, including:
 - `Resources/Server`
 - log files
 
-Put client mods in `beammp-data/Resources/Client` and server Lua plugins in `beammp-data/Resources/Server`.
+Put client mods in `beammp-data/Resources/Client` and server Lua plugins in `beammp-data/Resources/Server`. These folders are gitignored (only `.gitkeep` is tracked) — copy mod files directly onto the host at that path instead of committing them, since mods can be hundreds of MB and would bloat the repo.
 
 ## Notes
 
 - The entrypoint creates `ServerConfig.toml` on first boot if it does not already exist.
 - If `BEAMMP_PRIVATE=true` and `BEAMMP_AUTH_KEY` is empty, the container uses a placeholder auth key so a private direct-connect server can still boot while Keymaster is unavailable.
 - If you later want public listing, set `BEAMMP_PRIVATE=false`, add a real `BEAMMP_AUTH_KEY`, and redeploy.
+- `BEAMMP_ALLOW_GUESTS` defaults to `true` here. BeamMP-Server checks every connecting player against its auth backend regardless of `Private`, and kicks anyone without a linked BeamMP forum account when `AllowGuests=false` — even on a direct-connect server. Keep it `true` unless you specifically want to require forum accounts.
+- `BEAMMP_MAX_PLAYERS` defaults to `8`, which already covers a 5-player group with headroom; no change needed for that group size.
 - Environment variables can still override config values supported by BeamMP.
 - This is aimed at private hosting over Tailscale, not a public internet-facing server list setup.
 

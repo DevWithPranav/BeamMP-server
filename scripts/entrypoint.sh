@@ -35,7 +35,7 @@ Map = "${BEAMMP_MAP:-/levels/gridmap_v2/info.json}"
 MaxPlayers = ${BEAMMP_MAX_PLAYERS:-8}
 MaxCars = ${BEAMMP_MAX_CARS:-2}
 Tags = "${BEAMMP_TAGS:-Freeroam,Private}"
-AllowGuests = ${BEAMMP_ALLOW_GUESTS:-false}
+AllowGuests = ${BEAMMP_ALLOW_GUESTS:-true}
 LogChat = ${BEAMMP_LOG_CHAT:-false}
 ResourceFolder = "${BEAMMP_RESOURCE_FOLDER:-Resources}"
 EOF

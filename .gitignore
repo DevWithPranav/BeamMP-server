@@ -3,6 +3,10 @@
 beammp-data/Server.log
 beammp-data/server.log
 beammp-data/*.log
+beammp-data/ServerConfig.toml
+beammp-data/Resources/Client/*
+beammp-data/Resources/Server/*
+!beammp-data/Resources/Client/.gitkeep
+!beammp-data/Resources/Server/.gitkeep
 deploy/runtime.env
 deploy/ssh_key
-
