@@ -120,6 +120,34 @@ Persistent data is stored in `beammp-data/`, including:
 
 Put client mods in `beammp-data/Resources/Client` and server Lua plugins in `beammp-data/Resources/Server`. These folders are gitignored (only `.gitkeep` is tracked) — copy mod files directly onto the host at that path instead of committing them, since mods can be hundreds of MB and would bloat the repo.
 
+## Performance and resource limits
+
+- `docker-compose.yml` sets memory limits (`beammp`: 1536M, `tailscale`: 256M) so a runaway process can't take down the whole laptop, plus soft CPU/memory reservations so `beammp` is prioritized over the sidecar under load. These are not tight caps — they're headroom guards, not throttles.
+- Both services use the `json-file` logging driver with `max-size`/`max-file` limits, so container logs can't slowly fill the disk on a laptop that stays up for weeks.
+- The image has a `HEALTHCHECK` that verifies the `BeamMP-Server` process is still running (`docker compose ps` will show `unhealthy` if it crashes without exiting the container).
+- `scripts/bootstrap-ubuntu.sh` raises host-wide UDP/TCP socket buffer sizes and switches TCP to the BBR congestion control algorithm via `/etc/sysctl.d/99-beammp-net.conf`. The UDP buffer changes help gameplay sync avoid drops under load with several players; the TCP window (`tcp_rmem`/`tcp_wmem`) and BBR changes specifically help bulk transfer speed for mod/resource downloads when a player joins (see below). Re-run the bootstrap script (or `sysctl --system`) on an existing host to pick these up.
+
+### Diagnosing lag / "not enough bandwidth"
+
+BeamMP-Server itself has no tick-rate, thread-count, or bandwidth-limit setting to tune — `ServerConfig.toml` only controls things like map, player/car limits, and auth. If players are lagging or rubber-banding, the actual levers are:
+
+1. **Check whether Tailscale is relaying instead of connecting directly:**
+   ```bash
+   docker compose exec tailscale tailscale status
+   docker compose exec tailscale tailscale ping <player-tailscale-ip>
+   ```
+   `direct` means a peer-to-peer link at your real connection speed. `relay "<name>"` means traffic is bouncing through a DERP server, which is much lower throughput and higher latency. This usually happens because of NAT/CGNAT on one side. Forwarding UDP `41641` from your router to this host (and asking laggy players to do the same) is the usual remedy; carrier-grade NAT (common on mobile data) often can't be fixed at all and will always relay.
+2. **The host's actual uplink speed** is the real ceiling — an old laptop on a slow or asymmetric home connection will bottleneck before any server setting does.
+3. **`BEAMMP_MAX_PLAYERS`/`BEAMMP_MAX_CARS`** in `.env` control how much simulation state gets synced per tick; lowering `MaxCars` reduces per-player upload/download load if the connection is the bottleneck.
+
+### Slow mod/resource downloads on join
+
+This is a different bottleneck from gameplay lag. BeamMP-Server sends mods to a joining player with a plain `sendfile()` over TCP — there's no throttle or chunk-delay in the server itself, confirmed by reading `TNetwork.cpp` in the BeamMP-Server source. So a slow download always comes down to the network path, not a setting:
+
+1. A player stuck on the Tailscale relay (see above) will have very slow downloads — relay bandwidth is shared and capped, and this is usually the biggest single cause.
+2. The bootstrap script's `tcp_rmem`/`tcp_wmem`/BBR sysctls (above) give the TCP connection a bigger window and better throughput over the Tailscale tunnel, which specifically helps this kind of one-shot bulk transfer.
+3. The server laptop's actual upload speed is still the hard ceiling — a large mod pack over a slow home upload will always take a while, and there's nothing to configure around that.
+
 ## Notes
 
 - The entrypoint creates `ServerConfig.toml` on first boot if it does not already exist.

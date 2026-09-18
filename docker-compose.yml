@@ -15,6 +15,18 @@ services:
       - NET_ADMIN
       - SYS_MODULE
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 64M
 
   beammp:
     build:
@@ -41,6 +53,18 @@ services:
     volumes:
       - ./beammp-data:/srv/beammp
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          cpus: "1.0"
+          memory: 256M
 
 volumes:
   tailscale-state:

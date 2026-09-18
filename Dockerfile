@@ -5,7 +5,7 @@ ARG BEAMMP_VERSION=v3.9.3
 ARG BEAMMP_ASSET=BeamMP-Server.ubuntu.24.04.x86_64
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl jq liblua5.3-0 \
+    && apt-get install -y --no-install-recommends ca-certificates curl jq liblua5.3-0 procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/beammp
@@ -23,6 +23,9 @@ WORKDIR /srv/beammp
 
 EXPOSE 30814/tcp
 EXPOSE 30814/udp
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD pgrep -x BeamMP-Server || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
 
