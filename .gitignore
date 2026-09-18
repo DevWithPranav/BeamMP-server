@@ -10,3 +10,4 @@ beammp-data/Resources/Server/*
 !beammp-data/Resources/Server/.gitkeep
 deploy/runtime.env
 deploy/ssh_key
+COMMANDS.md
