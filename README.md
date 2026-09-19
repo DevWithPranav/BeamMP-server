@@ -24,6 +24,10 @@ Important: BeamMP currently supports IPv4. Tailscale gives each device a tailnet
 - `Dockerfile`: builds the BeamMP server image.
 - `docker-compose.yml`: runs Tailscale and BeamMP together.
 - `scripts/bootstrap-ubuntu.sh`: installs Docker, Docker Compose, and Tailscale on the Ubuntu host.
+- `scripts/entrypoint.sh`: container entrypoint — generates `ServerConfig.toml` on first boot, fixes volume ownership, drops to an unprivileged user.
+- `scripts/healthcheck.sh`: the image's `HEALTHCHECK` command.
+- `scripts/backup.sh`: backs up `beammp-data/` (config, plugins, logs) with retention.
+- `scripts/watch-events.sh`: optional Docker-events-to-Discord watcher, used by the `monitor` compose service.
 - `deploy/sync-and-run.sh`: what GitHub Actions runs remotely on the Ubuntu host.
 - `.github/workflows/validate.yml`: verifies compose and image build.
 - `.github/workflows/deploy.yml`: deploys to the Ubuntu laptop.
@@ -89,6 +93,7 @@ Set these in your GitHub repo settings:
 - `BEAMMP_LOG_CHAT`
 - `BEAMMP_VERSION`
 - `BEAMMP_ASSET`
+- `DISCORD_WEBHOOK_URL`: optional, only used if you enable the `monitoring` compose profile (see below).
 
 Recommended values on September 5, 2026:
 
@@ -123,9 +128,41 @@ Put client mods in `beammp-data/Resources/Client` and server Lua plugins in `bea
 ## Performance and resource limits
 
 - `docker-compose.yml` sets memory limits (`beammp`: 1536M, `tailscale`: 256M) so a runaway process can't take down the whole laptop, plus soft CPU/memory reservations so `beammp` is prioritized over the sidecar under load. These are not tight caps — they're headroom guards, not throttles.
+- `beammp` also has a `pids` limit (512) as a fork-bomb/runaway-process guard.
 - Both services use the `json-file` logging driver with `max-size`/`max-file` limits, so container logs can't slowly fill the disk on a laptop that stays up for weeks.
-- The image has a `HEALTHCHECK` that verifies the `BeamMP-Server` process is still running (`docker compose ps` will show `unhealthy` if it crashes without exiting the container).
+- The image has a `HEALTHCHECK` that verifies the `BeamMP-Server` process is running **and** actually accepting TCP connections on `BEAMMP_PORT` (`scripts/healthcheck.sh`) — a hung-but-still-running process fails this even though a bare `pgrep` would pass forever. `docker compose ps` shows `unhealthy` when it fails. `tailscale` has its own healthcheck (`tailscale status --json`), and `beammp` won't start until that reports healthy (`depends_on: condition: service_healthy`), so BeamMP never comes up before the tunnel is actually usable.
 - `scripts/bootstrap-ubuntu.sh` raises host-wide UDP/TCP socket buffer sizes and switches TCP to the BBR congestion control algorithm via `/etc/sysctl.d/99-beammp-net.conf`. The UDP buffer changes help gameplay sync avoid drops under load with several players; the TCP window (`tcp_rmem`/`tcp_wmem`) and BBR changes specifically help bulk transfer speed for mod/resource downloads when a player joins (see below). Re-run the bootstrap script (or `sysctl --system`) on an existing host to pick these up.
+
+## Security hardening
+
+- **Checksum-verified binary**: the Dockerfile downloads the BeamMP-Server release binary, then looks up the expected SHA-256 digest for that exact version+asset from GitHub's Releases API and fails the build if it doesn't match. This protects against a tampered-with or corrupted download; it does not (and can't) verify BeamMP's own build supply chain.
+- **Non-root process**: the container creates an unprivileged `beammp` system user. The entrypoint still starts as root just long enough to `chown` the bind-mounted `beammp-data/` (needed once, for hosts upgrading from an older image that ran as root), then drops to `beammp` via `runuser` before ever executing `BeamMP-Server`. The game server process itself never runs as root.
+- **Minimal container privileges**: `beammp` runs with `cap_drop: ALL` and `no-new-privileges:true` — it doesn't need any Linux capabilities to serve the game protocol. `tailscale` keeps `NET_ADMIN`/`SYS_MODULE` (required to manage the tun interface) but also sets `no-new-privileges:true`.
+- **No public port exposure**: `beammp` runs with `network_mode: service:tailscale` and there is no `ports:` mapping anywhere in `docker-compose.yml` — the game port is only reachable over the Tailscale interface, never bound to the host's public network interfaces.
+- **Graceful shutdown**: `stop_grace_period` is set (30s for `beammp`, 15s for `tailscale`) so `docker compose down`/`restart` give the server time to exit cleanly before Docker sends `SIGKILL`.
+
+## Backups
+
+`scripts/backup.sh` tars up the parts of `beammp-data/` that aren't easily replaceable — `ServerConfig.toml`, `Resources/Server` (Lua plugins), the dashboard, and logs — into `backups/beammp-backup-<timestamp>.tar.gz`, and prunes old archives (default: keep the last 14).
+
+```bash
+scripts/backup.sh                # excludes Resources/Client (mods/maps) by default
+scripts/backup.sh --with-mods    # include mods/maps too (much bigger archive)
+BACKUP_DIR=/mnt/nas/beammp RETAIN=30 scripts/backup.sh
+```
+
+`Resources/Client` is skipped by default since mod/map files can be large and are usually easy to re-obtain from wherever they came from; pass `--with-mods` if you'd rather have them in the backup too. Run it via cron for unattended daily backups, e.g. `0 4 * * * cd ~/apps/beammp-server && scripts/backup.sh >> backups/backup.log 2>&1`.
+
+## Monitoring and alerts
+
+An optional `monitor` service (in `docker-compose.yml`, under the `monitoring` profile so it's off by default) watches `docker events` for the `beammp` and `tailscale` containers and posts to a Discord webhook when either one starts, crashes/exits, or flips (un)healthy.
+
+```bash
+# .env: set DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+docker compose --profile monitoring up -d
+```
+
+This container is granted **read-only access to the Docker socket** so it can watch events — that's still a meaningful privilege (anyone who can reach it can inspect every container and image on the host), so only enable it if you're comfortable with that trade-off. If `DISCORD_WEBHOOK_URL` is unset it just logs events to its own container log instead of posting anywhere.
 
 ### Diagnosing lag / "not enough bandwidth"
 

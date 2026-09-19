@@ -57,6 +57,7 @@ jobs:
           BEAMMP_LOG_CHAT: ${{ secrets.BEAMMP_LOG_CHAT }}
           BEAMMP_VERSION: ${{ secrets.BEAMMP_VERSION }}
           BEAMMP_ASSET: ${{ secrets.BEAMMP_ASSET }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           {
             printf "export REPO_URL=%q\n" "$REPO_URL"
@@ -77,5 +78,6 @@ jobs:
             printf "export BEAMMP_LOG_CHAT=%q\n" "$BEAMMP_LOG_CHAT"
             printf "export BEAMMP_VERSION=%q\n" "$BEAMMP_VERSION"
             printf "export BEAMMP_ASSET=%q\n" "$BEAMMP_ASSET"
+            printf "export DISCORD_WEBHOOK_URL=%q\n" "$DISCORD_WEBHOOK_URL"
             printf "bash /tmp/beammp-sync-and-run.sh\n"
           } | ssh "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -se'

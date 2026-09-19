@@ -41,4 +41,13 @@ ResourceFolder = "${BEAMMP_RESOURCE_FOLDER:-Resources}"
 EOF
 fi
 
+if [[ "${EUID}" -eq 0 ]]; then
+  # /srv/beammp is bind-mounted from the host and may already be owned by
+  # root from an older image that ran the server as root - fix that up
+  # before dropping privileges so the unprivileged user can still write
+  # ServerConfig.toml, logs, and downloaded resources.
+  chown -R beammp:beammp /srv/beammp
+  exec runuser -u beammp -- /usr/local/bin/BeamMP-Server
+fi
+
 exec /usr/local/bin/BeamMP-Server

@@ -14,7 +14,16 @@ services:
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
+    stop_grace_period: 15s
+    healthcheck:
+      test: ["CMD", "tailscale", "status", "--json"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
     logging:
       driver: json-file
       options:
@@ -36,7 +45,8 @@ services:
         BEAMMP_ASSET: ${BEAMMP_ASSET:-BeamMP-Server.ubuntu.24.04.x86_64}
     network_mode: service:tailscale
     depends_on:
-      - tailscale
+      tailscale:
+        condition: service_healthy
     environment:
       BEAMMP_AUTH_KEY: ${BEAMMP_AUTH_KEY}
       BEAMMP_PRIVATE: ${BEAMMP_PRIVATE:-true}
@@ -53,6 +63,11 @@ services:
     volumes:
       - ./beammp-data:/srv/beammp
     restart: unless-stopped
+    stop_grace_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     logging:
       driver: json-file
       options:
@@ -62,9 +77,35 @@ services:
       resources:
         limits:
           memory: 1536M
+          pids: 512
         reservations:
           cpus: "1.0"
           memory: 256M
+
+  # Optional: posts a Discord message when `beammp` or `tailscale` die,
+  # restart, or flip (un)healthy. Not started by default - enable with
+  # `docker compose --profile monitoring up -d`. This container is granted
+  # read-only access to the Docker socket, which is itself a meaningful
+  # privilege (anyone who can reach it can inspect every container on the
+  # host), so only enable it if you're comfortable with that trade-off.
+  monitor:
+    image: docker:27-cli
+    profiles:
+      - monitoring
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts/watch-events.sh:/watch-events.sh:ro
+    entrypoint: ["/bin/sh", "/watch-events.sh"]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
 
 volumes:
   tailscale-state:

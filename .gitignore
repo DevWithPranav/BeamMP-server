@@ -11,3 +11,4 @@ beammp-data/Resources/Server/*
 deploy/runtime.env
 deploy/ssh_key
 COMMANDS.md
+backups/
