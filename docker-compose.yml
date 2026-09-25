@@ -7,6 +7,15 @@ services:
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "false"
       TS_EXTRA_ARGS: --accept-routes=false --ssh
+      # --port (a tailscaled daemon flag, so it goes via
+      # TS_TAILSCALED_EXTRA_ARGS, not TS_EXTRA_ARGS which is for `tailscale
+      # up`) pins this node's direct-connection UDP port. It can't share
+      # 41641 with the host's own native tailscaled (from
+      # scripts/bootstrap-ubuntu.sh, used for SSH access to the host itself)
+      # - both are separate tailnet nodes needing separate host-bound ports.
+      TS_TAILSCALED_EXTRA_ARGS: --port=41642
+    ports:
+      - "41642:41642/udp"
     volumes:
       - tailscale-state:/var/lib/tailscale
     devices:
@@ -60,14 +69,47 @@ services:
       BEAMMP_ALLOW_GUESTS: ${BEAMMP_ALLOW_GUESTS:-true}
       BEAMMP_LOG_CHAT: ${BEAMMP_LOG_CHAT:-false}
       BEAMMP_RESOURCE_FOLDER: ${BEAMMP_RESOURCE_FOLDER:-Resources}
+      # Scheduling priority for BeamMP-Server (-20 highest .. 19 lowest).
+      BEAMMP_NICE: ${BEAMMP_NICE:--5}
+      # Read by the ServerTools Lua plugin (Resources/Server/ServerTools).
+      BEAMMP_ADMINS: ${BEAMMP_ADMINS:-}
+      BEAMMP_WELCOME: ${BEAMMP_WELCOME:-Welcome! Type /help for commands.}
+      BEAMMP_STATS_INTERVAL: ${BEAMMP_STATS_INTERVAL:-60}
     volumes:
       - ./beammp-data:/srv/beammp
+    # Scratch space in RAM instead of the container's overlay filesystem.
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    # Make the kernel's OOM killer pick almost anything else on the host
+    # before the game server.
+    oom_score_adj: -500
     restart: unless-stopped
     stop_grace_period: 30s
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # The container briefly runs its entrypoint as root to `chown` the
+    # bind-mounted volume and switch to the unprivileged `beammp` user
+    # (see scripts/entrypoint.sh) before ever executing BeamMP-Server -
+    # that setup step needs these back. Dropping to a non-root uid via
+    # setuid() clears the process's capability sets regardless of what's
+    # in the bounding set, so the actual long-running server process still
+    # ends up with none of these (verify with `docker exec ... cat
+    # /proc/<beammp-server-pid>/status | grep Cap`).
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+      - SETPCAP
+      # Only used by the entrypoint to renice the server before the drop.
+      - SYS_NICE
     logging:
       driver: json-file
       options:
@@ -76,7 +118,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536M
+          memory: 4.5G
+          cpus: "3.5"
           pids: 512
         reservations:
           cpus: "1.0"
@@ -98,6 +141,31 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./scripts/watch-events.sh:/watch-events.sh:ro
     entrypoint: ["/bin/sh", "/watch-events.sh"]
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  # Optional (same `monitoring` profile): samples CPU/RAM/network of both
+  # containers plus the player count logged by the ServerTools plugin,
+  # appends it to ./metrics/stats.csv, and posts a periodic Discord summary.
+  stats:
+    image: docker:27-cli
+    profiles:
+      - monitoring
+    environment:
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      STATS_SAMPLE_SECONDS: ${STATS_SAMPLE_SECONDS:-60}
+      STATS_REPORT_MINUTES: ${STATS_REPORT_MINUTES:-60}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scripts/stats-reporter.sh:/stats-reporter.sh:ro
+      - ./metrics:/metrics
+    entrypoint: ["/bin/sh", "/stats-reporter.sh"]
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

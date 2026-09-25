@@ -1,14 +1,14 @@
-FROM ubuntu:24.04
+# Download/verify stage: curl and jq are only needed to fetch and checksum
+# the binary, so they live here and never ship in the runtime image.
+FROM ubuntu:24.04 AS fetch
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BEAMMP_VERSION=v3.9.3
 ARG BEAMMP_ASSET=BeamMP-Server.ubuntu.24.04.x86_64
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl jq liblua5.3-0 procps bash \
+    && apt-get install -y --no-install-recommends ca-certificates curl jq \
     && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /opt/beammp
 
 # Verify the downloaded binary's checksum against the digest GitHub's Releases
 # API reports for this exact tag+asset, so a compromised mirror or a
@@ -26,6 +26,15 @@ RUN curl -fsSL -o /tmp/beammp-server \
     && chmod +x /tmp/beammp-server \
     && mv /tmp/beammp-server /usr/local/bin/BeamMP-Server
 
+FROM ubuntu:24.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# ca-certificates: BeamMP-Server talks HTTPS to the BeamMP backend.
+# procps: pgrep/renice for the healthcheck and entrypoint.
+RUN apt-get update     && apt-get install -y --no-install-recommends ca-certificates liblua5.3-0 procps bash     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=fetch /usr/local/bin/BeamMP-Server /usr/local/bin/BeamMP-Server
 COPY scripts/entrypoint.sh /entrypoint.sh
 COPY scripts/healthcheck.sh /healthcheck.sh
 

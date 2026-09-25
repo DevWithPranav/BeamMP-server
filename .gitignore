@@ -8,6 +8,9 @@ beammp-data/Resources/Client/*
 beammp-data/Resources/Server/*
 !beammp-data/Resources/Client/.gitkeep
 !beammp-data/Resources/Server/.gitkeep
+!beammp-data/Resources/Server/ServerTools/
+beammp-data/Resources/Server/ServerTools/bans.json
+metrics/
 deploy/runtime.env
 deploy/ssh_key
 COMMANDS.md

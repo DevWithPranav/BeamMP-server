@@ -47,7 +47,22 @@ if [[ "${EUID}" -eq 0 ]]; then
   # before dropping privileges so the unprivileged user can still write
   # ServerConfig.toml, logs, and downloaded resources.
   chown -R beammp:beammp /srv/beammp
-  exec runuser -u beammp -- /usr/local/bin/BeamMP-Server
+  # Raise CPU/IO priority while still root (needs CAP_SYS_NICE); the nice
+  # value and IO class survive the exec below, so BeamMP-Server keeps them
+  # without holding any capability itself. Best-effort: never block startup.
+  renice -n "${BEAMMP_NICE:--5}" -p $$ >/dev/null 2>&1 || \
+    echo "Could not renice BeamMP-Server (missing SYS_NICE?); continuing." >&2
+  ionice -c 2 -n 0 -p $$ >/dev/null 2>&1 || true
+  # `runuser -u` alone does not reliably clear capabilities carried over
+  # from the container's (possibly cap_add'd) bounding set - verified by
+  # inspecting /proc/<pid>/status, which showed the server process still
+  # holding CAP_CHOWN/SETUID/etc after a plain `runuser` switch. setpriv's
+  # --bounding-set=-all explicitly empties the bounding set for this
+  # process (and everything it execs), so BeamMP-Server truly ends up
+  # capability-less regardless of what the container needed for setup.
+  exec setpriv --reuid=beammp --regid=beammp --clear-groups \
+    --inh-caps=-all --bounding-set=-all --no-new-privs \
+    -- /usr/local/bin/BeamMP-Server
 fi
 
 exec /usr/local/bin/BeamMP-Server

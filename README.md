@@ -127,17 +127,34 @@ Put client mods in `beammp-data/Resources/Client` and server Lua plugins in `bea
 
 ## Performance and resource limits
 
-- `docker-compose.yml` sets memory limits (`beammp`: 1536M, `tailscale`: 256M) so a runaway process can't take down the whole laptop, plus soft CPU/memory reservations so `beammp` is prioritized over the sidecar under load. These are not tight caps — they're headroom guards, not throttles.
+- `docker-compose.yml` sets memory limits (`beammp`: 4.5G, `tailscale`: 256M) and a CPU limit on `beammp` (3.5 of the host's 4 cores), plus soft CPU/memory reservations so `beammp` is prioritized over the sidecar under load. These are hard caps sized against this specific host (a 4-core/5.6GB laptop) to leave a sliver of headroom for the OS and the Tailscale sidecar — deliberately aggressive, so watch `docker stats` under real player load and pull them back down if the host itself starts lagging. If you move this to different hardware, resize both figures to match.
 - `beammp` also has a `pids` limit (512) as a fork-bomb/runaway-process guard.
 - Both services use the `json-file` logging driver with `max-size`/`max-file` limits, so container logs can't slowly fill the disk on a laptop that stays up for weeks.
 - The image has a `HEALTHCHECK` that verifies the `BeamMP-Server` process is running **and** actually accepting TCP connections on `BEAMMP_PORT` (`scripts/healthcheck.sh`) — a hung-but-still-running process fails this even though a bare `pgrep` would pass forever. `docker compose ps` shows `unhealthy` when it fails. `tailscale` has its own healthcheck (`tailscale status --json`), and `beammp` won't start until that reports healthy (`depends_on: condition: service_healthy`), so BeamMP never comes up before the tunnel is actually usable.
 - `scripts/bootstrap-ubuntu.sh` raises host-wide UDP/TCP socket buffer sizes and switches TCP to the BBR congestion control algorithm via `/etc/sysctl.d/99-beammp-net.conf`. The UDP buffer changes help gameplay sync avoid drops under load with several players; the TCP window (`tcp_rmem`/`tcp_wmem`) and BBR changes specifically help bulk transfer speed for mod/resource downloads when a player joins (see below). Re-run the bootstrap script (or `sysctl --system`) on an existing host to pick these up.
 
+- **Scheduling priority**: the entrypoint renices `BeamMP-Server` to `BEAMMP_NICE` (default `-5`) and gives it best-effort IO priority while still root (via the `SYS_NICE` capability), so it wins CPU contention on a busy host. `oom_score_adj: -500` makes the kernel OOM-kill almost anything else first, `nofile` is raised to 65536, and `/tmp` is a 64MB tmpfs.
+- **Slim image**: the Dockerfile is multi-stage; `curl`/`jq` are only used to download and verify the binary and are not in the runtime image.
+- **Host tuning** (`scripts/bootstrap-ubuntu.sh`): socket buffers, BBR, TCP fast open, UDP GRO forwarding for Tailscale's WireGuard traffic (re-applied on every interface-up), and the `performance` CPU governor to avoid clock ramp-up jitter. Re-run the script on an existing host to apply these.
+
+## ServerTools plugin
+
+`beammp-data/Resources/Server/ServerTools/main.lua` is loaded automatically. Set `BEAMMP_ADMINS` to a comma-separated list of BeamMP account names (guests can never be admins).
+
+- Everyone: `/help`, `/players`
+- Admins: `/kick <name> [reason]`, `/ban <name> [reason]`, `/unban <name>`, `/say <message>`. Names can be partial if unambiguous. Bans persist in `ServerTools/bans.json`.
+- `BEAMMP_WELCOME` is sent to each player on join.
+- Every `BEAMMP_STATS_INTERVAL` seconds it logs `[stats] players=N vehicles=M`.
+
+## Metrics
+
+`docker compose --profile monitoring up -d` also starts `stats`, which samples CPU/RAM/network of both containers plus the player count every `STATS_SAMPLE_SECONDS`, appends to `metrics/stats.csv`, and posts an average/peak summary to `DISCORD_WEBHOOK_URL` every `STATS_REPORT_MINUTES`. Use the CSV to size the resource limits against real load.
+
 ## Security hardening
 
 - **Checksum-verified binary**: the Dockerfile downloads the BeamMP-Server release binary, then looks up the expected SHA-256 digest for that exact version+asset from GitHub's Releases API and fails the build if it doesn't match. This protects against a tampered-with or corrupted download; it does not (and can't) verify BeamMP's own build supply chain.
-- **Non-root process**: the container creates an unprivileged `beammp` system user. The entrypoint still starts as root just long enough to `chown` the bind-mounted `beammp-data/` (needed once, for hosts upgrading from an older image that ran as root), then drops to `beammp` via `runuser` before ever executing `BeamMP-Server`. The game server process itself never runs as root.
-- **Minimal container privileges**: `beammp` runs with `cap_drop: ALL` and `no-new-privileges:true` — it doesn't need any Linux capabilities to serve the game protocol. `tailscale` keeps `NET_ADMIN`/`SYS_MODULE` (required to manage the tun interface) but also sets `no-new-privileges:true`.
+- **Non-root process**: the container creates an unprivileged `beammp` system user. The entrypoint still starts as root just long enough to `chown` the bind-mounted `beammp-data/` (needed once, for hosts upgrading from an older image that ran as root), then switches to `beammp` via `setpriv --bounding-set=-all` before ever executing `BeamMP-Server`. That explicit bounding-set drop matters: a plain `runuser`/`setuid` switch does *not* reliably clear a process's capabilities when the container's own capability set has been added back to (as below) — verified by inspecting `/proc/<pid>/status` — so `setpriv` is what actually guarantees `BeamMP-Server` ends up with zero capabilities, confirmed by `CapEff: 0000000000000000` at runtime.
+- **Minimal container privileges**: `beammp` runs with `cap_drop: ALL` plus a small `cap_add` (`CHOWN`, `FOWNER`, `DAC_OVERRIDE`, `SETUID`, `SETGID`, `SETPCAP`) that exists *only* for the root setup step above (fixing ownership and dropping to `beammp`) — `BeamMP-Server` itself never uses or retains any of them, per the `setpriv` bounding-set drop. `no-new-privileges:true` is also set. `tailscale` keeps `NET_ADMIN`/`SYS_MODULE` (required to manage the tun interface) and also sets `no-new-privileges:true`.
 - **No public port exposure**: `beammp` runs with `network_mode: service:tailscale` and there is no `ports:` mapping anywhere in `docker-compose.yml` — the game port is only reachable over the Tailscale interface, never bound to the host's public network interfaces.
 - **Graceful shutdown**: `stop_grace_period` is set (30s for `beammp`, 15s for `tailscale`) so `docker compose down`/`restart` give the server time to exit cleanly before Docker sends `SIGKILL`.
 

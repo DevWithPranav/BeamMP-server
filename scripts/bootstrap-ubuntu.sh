@@ -46,9 +46,45 @@ net.ipv4.tcp_rmem = 4096 1048576 8388608
 net.ipv4.tcp_wmem = 4096 1048576 8388608
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
+net.ipv4.udp_rmem_min = 16384
+net.ipv4.udp_wmem_min = 16384
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_mtu_probing = 1
 EOF
 modprobe tcp_bbr 2>/dev/null || true
 sysctl --system
+
+# UDP GRO forwarding lets the kernel batch WireGuard packets, which
+# Tailscale recommends on Linux for much higher throughput / lower CPU per
+# packet. Applied now and on every interface-up via networkd-dispatcher.
+apt-get install -y ethtool networkd-dispatcher
+install -d /etc/networkd-dispatcher/routable.d
+cat > /etc/networkd-dispatcher/routable.d/50-tailscale-gro <<'EOF'
+#!/bin/sh
+dev="$(ip -o route get 8.8.8.8 | awk '{for (i = 1; i < NF; i++) if ($i == "dev") print $(i + 1)}')"
+[ -n "$dev" ] && ethtool -K "$dev" rx-udp-gro-forwarding on rx-gro-list off 2>/dev/null || true
+EOF
+chmod 755 /etc/networkd-dispatcher/routable.d/50-tailscale-gro
+/etc/networkd-dispatcher/routable.d/50-tailscale-gro
+
+# Keep the CPU at full clock instead of ramping up on demand; physics sync
+# ticks are latency-sensitive and a laptop's powersave governor adds jitter.
+if ls /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1; then
+  cat > /etc/systemd/system/cpu-performance.service <<'EOF'
+[Unit]
+Description=Set CPU frequency governor to performance
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo performance > "$g"; done'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now cpu-performance.service || true
+fi
 
 echo "Bootstrap complete. Next: run 'tailscale up', clone the repo, create .env, and start 'docker compose up -d --build'."
 echo "If players report lag, check whether Tailscale is relaying instead of connecting directly:"
